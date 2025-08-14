@@ -28,7 +28,7 @@ import java.util.Set;
  */
 public class PartitionDistributionUtils {
 
-    private static final DistributionAlgorithm DISTRIBUTION_ALGORITHM = new RendezvousDistributionFunction();
+    private static final DistributionAlgorithm DISTRIBUTION_ALGORITHM = MementoDistributionFunction.getInstance(1);
 
     /**
      * Calculates assignments distribution.
