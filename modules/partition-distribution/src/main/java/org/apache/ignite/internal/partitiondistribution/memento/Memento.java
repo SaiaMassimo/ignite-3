@@ -7,8 +7,8 @@ import java.util.Arrays;
  *
  * @author Massimo Coluzzi
  */
-public class Memento
-{
+public class Memento {
+
 
     /** The minimum size of the memento table. */
     private static final int MIN_TABLE_SIZE = 1 << 4;
@@ -26,10 +26,8 @@ public class Memento
 
     /**
      * Constructor with parameters.
-     *
      */
-    public Memento()
-    {
+    public Memento() {
 
         super();
 
@@ -57,16 +55,16 @@ public class Memento
      * @param prevRemoved the previous removed bucket
      * @return the value of the new last removed bucket
      */
-    public int remember( int bucket, int replacer, int prevRemoved )
-    {
+    public int remember(int bucket, int replacer, int prevRemoved) {
 
-        final Entry entry = new Entry( bucket, replacer, prevRemoved );
+        final Entry entry = new Entry(bucket, replacer, prevRemoved);
 
-        add( entry, table );
+        add(entry, table);
         ++this.size;
 
-        if( size > capacity() )
-            resizeTable( table.length << 1 );
+        if (size > capacity()) {
+            resizeTable(table.length << 1);
+        }
 
         return bucket;
 
@@ -84,10 +82,9 @@ public class Memento
      * @param bucket the bucket to search for
      * @return the replacing bucket if any, {@code -1} otherwise
      */
-    public int replacer( int bucket )
-    {
+    public int replacer(int bucket) {
 
-        final Entry entry = get( bucket );
+        final Entry entry = get(bucket);
         return entry != null ? entry.replacer : -1;
 
     }
@@ -102,17 +99,18 @@ public class Memento
      * @param bucket the bucket to restore
      * @return the new last removed bucket
      */
-    public int restore( int bucket )
-    {
+    public int restore(int bucket) {
 
-        if( isEmpty() )
+        if (isEmpty()) {
             return bucket + 1;
+        }
 
-        final Entry entry = remove( bucket );
+        final Entry entry = remove(bucket);
         --this.size;
 
-        if( size <= capacity() >> 2 )
-            resizeTable( table.length >>> 1 );
+        if (size <= capacity() >> 2) {
+            resizeTable(table.length >>> 1);
+        }
 
         return entry.prevRemoved;
 
@@ -123,8 +121,7 @@ public class Memento
      *
      * @return {@code true} if empty, {@code false} otherwise
      */
-    public boolean isEmpty()
-    {
+    public boolean isEmpty() {
 
         return size <= 0;
 
@@ -135,8 +132,7 @@ public class Memento
      *
      * @return the size of the replacement set
      */
-    public int size()
-    {
+    public int size() {
 
         return size;
 
@@ -147,8 +143,7 @@ public class Memento
      *
      * @return the size of the lookup table used to implement the replacement set
      */
-    public int capacity()
-    {
+    public int capacity() {
 
         /*
          * We want to keep a load factor of 0.75 to have an average access time of O(1).
@@ -178,8 +173,7 @@ public class Memento
      * @param entry the entry to add
      * @param table the table to be modified
      */
-    private void add(Entry entry, Entry[] table )
-    {
+    private void add(Entry entry, Entry[] table) {
 
         /*
          * We used the same approach adopted by java.util.HashMap
@@ -200,8 +194,7 @@ public class Memento
      *
      * @param bucket the bucket to search for
      */
-    private Entry get(int bucket )
-    {
+    private Entry get(int bucket) {
 
         /*
          * We used the same approach adopted by java.util.HashMap
@@ -212,10 +205,10 @@ public class Memento
         final int index  = (table.length - 1) & hash;
 
         Entry entry = table[index];
-        while( entry != null )
-        {
-            if( entry.bucket == bucket )
+        while (entry != null) {
+            if (entry.bucket == bucket) {
                 return entry;
+            }
 
             entry = entry.next;
         }
@@ -230,30 +223,31 @@ public class Memento
      * @param bucket the bucket to remove
      * @return the related entry in the table
      */
-    private Entry remove(int bucket )
-    {
+    private Entry remove(int bucket) {
 
-        final int hash   = bucket ^ bucket >>> 16;
-        final int index  = (table.length - 1) & hash;
+        final int hash = bucket ^ bucket >>> 16;
+        final int index = (table.length - 1) & hash;
 
         Entry entry = table[index];
-        if( entry == null )
+        if (entry == null) {
             return null;
+        }
 
         Entry prev = null;
-        while( entry != null && entry.bucket != bucket )
-        {
+        while (entry != null && entry.bucket != bucket) {
             prev = entry;
             entry = entry.next;
         }
 
-        if( entry == null )
+        if (entry == null) {
             return null;
+        }
 
-        if( prev == null )
+        if (prev == null) {
             table[index] = entry.next;
-        else
+        } else {
             prev.next = entry.next;
+        }
 
         entry.next = null;
 
@@ -267,24 +261,23 @@ public class Memento
      *
      * @param newTableSize the size of the new lookup table
      */
-    private void resizeTable( int newTableSize )
-    {
+    private void resizeTable(int newTableSize) {
 
-        if( newTableSize < table.length && table.length <= MIN_TABLE_SIZE )
+        if (newTableSize < table.length && table.length <= MIN_TABLE_SIZE) {
             return;
+        }
 
-        if( newTableSize > table.length && table.length >= MAX_TABLE_SIZE )
+        if (newTableSize > table.length && table.length >= MAX_TABLE_SIZE) {
             return;
+        }
 
-        final Entry[] newTable = new Entry[ newTableSize ];
-        for( int i = 0; i < table.length; ++i )
-        {
+        final Entry[] newTable = new Entry[newTableSize];
+        for (int i = 0; i < table.length; ++i) {
             Entry entry = table[i];
-            while( entry != null )
-            {
+            while (entry != null) {
 
-                final Entry newEntry = new Entry( entry.bucket, entry.replacer, entry.prevRemoved );
-                add( newEntry, newTable );
+                final Entry newEntry = new Entry(entry.bucket, entry.replacer, entry.prevRemoved);
+                add(newEntry, newTable);
 
                 entry = entry.next;
 
@@ -313,8 +306,7 @@ public class Memento
      *
      * @author Massimo Coluzzi
      */
-    private static class Entry implements Cloneable
-    {
+    private static class Entry implements Cloneable {
 
         /** The removed bucket. */
         private int bucket;
@@ -365,6 +357,16 @@ public class Memento
                     .append(")")
                     .toString();
         }
+        @Override
+        protected Entry clone() {
+            try {
+                return (Entry) super.clone();
+            } catch (CloneNotSupportedException e) {
+                // This should not happen, as we are Cloneable.
+                throw new InternalError(e);
+            }
+        }
+
     }
 
 }

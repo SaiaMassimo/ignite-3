@@ -200,7 +200,7 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
                 }*/
                 attempts++;
             }
-            System.out.println("Numero tentativi:"+attempts);
+            //System.out.println("Numero tentativi:"+attempts);
             result.add(assignments);
         }
 
