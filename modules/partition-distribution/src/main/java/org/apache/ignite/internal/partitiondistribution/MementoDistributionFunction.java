@@ -34,7 +34,7 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
     private final Map<String, Integer> nodeToBucket = new HashMap<>();
     private final Map<Integer, String> bucketToNode = new HashMap<>();
 
-    // Costruttore privato per il pattern singleton
+
     private MementoDistributionFunction(int size) {
         this.lastRemoved = size;
         this.binomialEngine = new BinomialEngine(size);
@@ -142,6 +142,47 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
         );
         return bucket;
     }
+    /**
+     * Returns the bucket where the given key should be mapped using a temporary memento.
+     *
+     * @param key the key to map
+     * @param tempMemento temporary memento for replica assignment
+     * @return the related bucket
+     */
+    private int getBucketWithTempMemento(String key, Memento tempMemento) {
+        int b = binomialEngine.getBucket(key);
+
+        // Prima controlla il memento temporaneo
+        int tempReplacer = tempMemento.replacer(b);
+        while (tempReplacer >= 0) {
+            final long h = Math.abs(hash(key, b));
+            b = (int)(h % tempReplacer);
+
+            int r = tempMemento.replacer(b);
+            while (r >= tempReplacer) {
+                b = r;
+                r = tempMemento.replacer(b);
+            }
+            tempReplacer = r;
+        }
+
+        // Poi controlla il memento principale
+        int replacer = memento.replacer(b);
+        while (replacer >= 0) {
+            final long h = Math.abs(hash(key, b));
+            b = (int)(h % replacer);
+
+            int r = memento.replacer(b);
+            while (r >= replacer) {
+                b = r;
+                r = memento.replacer(b);
+            }
+            replacer = r;
+        }
+
+        return b;
+    }
+
     @Override
     public List<Set<Assignment>> assignPartitions(Collection<String> nodes, List<List<String>> currentDistribution, int partitions,
             int replicaFactor, int consensusGroupSize) {
@@ -154,7 +195,7 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
 
         Set<String> currentNodes = new HashSet<>(nodeToBucket.keySet());
         Set<String> newNodes = new HashSet<>(nodes);
-
+        //removed nodes
         for (String node : currentNodes) {
             if (!newNodes.contains(node)) {
                 int bucket = nodeToBucket.remove(node);
@@ -174,33 +215,41 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
         List<Set<Assignment>> result = new ArrayList<>(partitions);
         List<String> sortedNodes = new ArrayList<>(nodeToBucket.keySet());
         Collections.sort(sortedNodes);
+
         for (int part = 0; part < partitions; part++) {
             Set<Assignment> assignments = new LinkedHashSet<>();
-            Set<Integer> usedBuckets = new HashSet<>();
-            int attempts = 0;
-            int maxAttempts = 10 * effectiveReplicas;
 
-            while (assignments.size() < effectiveReplicas/* && attempts < maxAttempts*/) {
-                String key = "partition-" + part + "-" + attempts;
-                int bucket = getBucket(key);
+            // Crea una nuova tabella di rimozione temporanea per questa partizione
+            Memento tempMemento = new Memento();
+            int currentSize = size();
+            int lastTempRemoved = currentSize;
 
-                if (!usedBuckets.contains(bucket) && bucketToNode.containsKey(bucket)) {
+            String baseKey = "partition-" + part;
+
+            while (assignments.size() < effectiveReplicas) {
+                int bucket = getBucketWithTempMemento(baseKey, tempMemento);
+
+                if (bucketToNode.containsKey(bucket)) {
                     String node = bucketToNode.get(bucket);
                     assignments.add(assignments.size() < consensusGroupSize
                             ? Assignment.forPeer(node)
                             : Assignment.forLearner(node));
-                    usedBuckets.add(bucket);
+
+                    // Rimuovi temporaneamente questo bucket dalla tabella temporanea
+                    // per garantire che la prossima replica vada su un nodo diverso
+                    lastTempRemoved = tempMemento.remember(bucket, currentSize - 1, lastTempRemoved);
+                    currentSize--;
                 }
 
-                /*if(bucketToNode.containsKey(bucket)) {
-                    String node = bucketToNode.get(bucket);
-                    assignments.add(assignments.size() < consensusGroupSize
-                            ? Assignment.forPeer(node)
-                            : Assignment.forLearner(node));
-                }*/
-                attempts++;
+                // Modifica la chiave base per il prossimo tentativo
+                baseKey = baseKey + "-next";
+
+                // Protezione contro loop infiniti
+                if (baseKey.length() > 1000) {
+                    break;
+                }
             }
-            //System.out.println("Numero tentativi:"+attempts);
+
             result.add(assignments);
         }
 

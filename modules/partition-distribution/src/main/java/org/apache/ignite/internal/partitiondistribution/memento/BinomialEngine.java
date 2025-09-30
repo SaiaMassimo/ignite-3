@@ -180,12 +180,18 @@ public class BinomialEngine
     {
 
         final int newBucket = size;
-        if( ++size > enclosingTreeFilter )
-        {
-            this.enclosingTreeFilter = (this.enclosingTreeFilter << 1) | 1;
-            this.minorTreeFilter = (this.minorTreeFilter << 1) | 1;
-        }
 
+        if (++size == 1) {
+            this.enclosingTreeFilter = 1;
+            this.minorTreeFilter = 0;
+        } else {
+            int highestOneBit = Integer.highestOneBit( size );
+            if( size > highestOneBit )
+                highestOneBit = highestOneBit << 1;
+
+            this.enclosingTreeFilter = highestOneBit - 1;
+            this.minorTreeFilter = this.enclosingTreeFilter >> 1;
+        }
         return newBucket;
 
     }
