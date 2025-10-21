@@ -289,26 +289,6 @@ public class Memento {
 
     }
 
-    /**
-     * Crea una copia di questo memento.
-     * Utile per creare tabelle temporanee di rimozione.
-     *
-     * @return una nuova istanza di Memento con gli stessi dati
-     */
-    public Memento copy() {
-        Memento copy = new Memento();
-        
-        for (int i = 0; i < table.length; ++i) {
-            Entry entry = table[i];
-            while (entry != null) {
-                copy.remember(entry.bucket, entry.replacer, entry.prevRemoved);
-                entry = entry.next;
-            }
-        }
-        
-        return copy;
-    }
-
     @Override
     public String toString() {
         return "MementoWithBinomial{" +

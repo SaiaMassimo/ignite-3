@@ -25,6 +25,7 @@ dependencies {
     implementation project(':ignite-api')
     implementation project(':ignite-core')
     implementation libs.jetbrains.annotations
+    implementation 'commons-codec:commons-codec:1.16.0'
 
     testImplementation libs.hamcrest.core
 }

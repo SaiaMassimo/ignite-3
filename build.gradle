@@ -103,6 +103,7 @@ allprojects {
     }
 
     tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
         options.tags = ["apiNote"]
         options.addStringOption('bottom', javadocFooter())
     }

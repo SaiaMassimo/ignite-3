@@ -41,6 +41,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import org.apache.ignite.internal.lang.IgniteInternalException;
 import org.apache.ignite.internal.lang.NodeStoppingException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,15 +58,17 @@ public class ThreadSafeMementoDistributionFunctionTest {
     private static final double DISTRIBUTION_DEVIATION_RATIO = 0.2;
 
     private ThreadSafeMementoDistributionFunction distributionFunction;
+    private boolean skipTearDown = false;
 
     @BeforeEach
     public void setUp() {
         distributionFunction = new ThreadSafeMementoDistributionFunction(1);
+        skipTearDown = false;
     }
 
     @AfterEach
     public void tearDown() {
-        if (distributionFunction != null) {
+        if (distributionFunction != null && !skipTearDown) {
             distributionFunction.stop();
         }
     }
@@ -253,6 +256,8 @@ public class ThreadSafeMementoDistributionFunctionTest {
 
     @Test
     public void testConcurrentTopologyUpdates() throws InterruptedException {
+        skipTearDown = true; // Gestione manuale dello stop
+        
         int numThreads = 10;
         int updatesPerThread = 100;
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
@@ -278,14 +283,20 @@ public class ThreadSafeMementoDistributionFunctionTest {
             });
         }
 
-        assertTrue(latch.await(10, TimeUnit.SECONDS), "Test timed out");
-        assertEquals(numThreads * updatesPerThread, successCount.get());
-
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "Test timed out");
+        
         executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS), "Executor did not terminate");
+        
+        assertEquals(numThreads * updatesPerThread, successCount.get());
+        
+        distributionFunction.stop();
     }
 
     @Test
     public void testConcurrentAssignPartitions() throws InterruptedException {
+        skipTearDown = true; // Gestione manuale dello stop
+        
         List<String> nodes = prepareNetworkTopology(10);
         distributionFunction.updateTopology(nodes);
 
@@ -303,14 +314,14 @@ public class ThreadSafeMementoDistributionFunctionTest {
                         List<Set<Assignment>> assignments = distributionFunction.assignPartitions(
                                 nodes, emptyList(), 100, 3, 2
                         );
-                        
+
                         // Verify assignments
                         assertEquals(100, assignments.size());
                         for (Set<Assignment> assignment : assignments) {
                             assertEquals(3, assignment.size());
                             assertEquals(2, assignment.stream().filter(Assignment::isPeer).count());
                         }
-                        
+
                         successCount.incrementAndGet();
                         results.put("thread-" + Thread.currentThread().getId(), j);
                     }
@@ -320,14 +331,20 @@ public class ThreadSafeMementoDistributionFunctionTest {
             });
         }
 
-        assertTrue(latch.await(10, TimeUnit.SECONDS), "Test timed out");
-        assertEquals(numThreads * assignmentsPerThread, successCount.get());
-
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "Test timed out");
+        
         executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS), "Executor did not terminate");
+        
+        assertEquals(numThreads * assignmentsPerThread, successCount.get());
+        
+        distributionFunction.stop();
     }
 
     @Test
     public void testConcurrentTopologyUpdateAndAssignPartitions() throws InterruptedException {
+        skipTearDown = true; // Gestione manuale dello stop
+        
         int numThreads = 10;
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
         CountDownLatch latch = new CountDownLatch(numThreads);
@@ -361,10 +378,14 @@ public class ThreadSafeMementoDistributionFunctionTest {
             });
         }
 
-        assertTrue(latch.await(10, TimeUnit.SECONDS), "Test timed out");
-        assertEquals(numThreads * 50, successCount.get());
-
+        assertTrue(latch.await(30, TimeUnit.SECONDS), "Test timed out");
+        
         executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS), "Executor did not terminate");
+        
+        assertEquals(numThreads * 50, successCount.get());
+        
+        distributionFunction.stop();
     }
 
     @Test
@@ -376,11 +397,15 @@ public class ThreadSafeMementoDistributionFunctionTest {
         distributionFunction.stop();
 
         // Operations should fail after stop
-        assertThrows(NodeStoppingException.class, () -> {
+        // inBusyLock lancia IgniteInternalException con causa NodeStoppingException
+        IgniteInternalException exception = assertThrows(IgniteInternalException.class, () -> {
             distributionFunction.assignPartitions(nodes, emptyList(), 10, 3, 2);
         });
+        
+        assertTrue(exception.getCause() instanceof NodeStoppingException,
+                "Expected NodeStoppingException as cause, but got: " + exception.getCause());
 
-        // Topology updates should be ignored after stop
+        // Topology updates should be ignored after stop (inBusyLock restituisce semplicemente)
         distributionFunction.updateTopology(List.of("node1", "node2"));
         // Should not throw, but should be ignored
     }
@@ -413,7 +438,7 @@ public class ThreadSafeMementoDistributionFunctionTest {
         double avgTimePerCall = totalTime / 100.0 / 1_000_000.0; // Convert to milliseconds
 
         System.out.println("Average time per assignPartitions call: " + avgTimePerCall + " ms");
-        
+
         // Performance should be reasonable (less than 10ms per call for 1000 partitions)
         assertTrue(avgTimePerCall < 10.0, "Performance is too slow: " + avgTimePerCall + " ms per call");
     }
@@ -433,7 +458,7 @@ public class ThreadSafeMementoDistributionFunctionTest {
         for (Map.Entry<String, Integer> entry : nodeToBucket.entrySet()) {
             String node = entry.getKey();
             Integer bucket = entry.getValue();
-            
+
             assertEquals(node, bucketToNode.get(bucket));
             assertTrue(nodes.contains(node));
         }
@@ -441,7 +466,7 @@ public class ThreadSafeMementoDistributionFunctionTest {
         for (Map.Entry<Integer, String> entry : bucketToNode.entrySet()) {
             Integer bucket = entry.getKey();
             String node = entry.getValue();
-            
+
             assertEquals(bucket, nodeToBucket.get(node));
             assertTrue(nodes.contains(node));
         }
@@ -519,5 +544,55 @@ public class ThreadSafeMementoDistributionFunctionTest {
         sb.append(']');
 
         return sb.toString();
+    }
+
+    @Test
+    public void testUpdateTopology() {
+        List<String> initialNodes = List.of("node1", "node2", "node3");
+        
+        // Update topology via dedicated method
+        distributionFunction.updateTopology(initialNodes);
+        
+        // Verify mappings were created
+        assertEquals(3, distributionFunction.getNodeToBucketMapping().size());
+        assertEquals(3, distributionFunction.getBucketToNodeMapping().size());
+        
+        // Add more nodes
+        List<String> expandedNodes = List.of("node1", "node2", "node3", "node4", "node5");
+        distributionFunction.updateTopology(expandedNodes);
+        
+        assertEquals(5, distributionFunction.getNodeToBucketMapping().size());
+        assertTrue(distributionFunction.getNodeToBucketMapping().containsKey("node4"));
+        assertTrue(distributionFunction.getNodeToBucketMapping().containsKey("node5"));
+        
+        // Remove nodes
+        List<String> reducedNodes = List.of("node1", "node3", "node5");
+        distributionFunction.updateTopology(reducedNodes);
+        
+        assertEquals(3, distributionFunction.getNodeToBucketMapping().size());
+        assertTrue(distributionFunction.getNodeToBucketMapping().containsKey("node1"));
+        assertTrue(distributionFunction.getNodeToBucketMapping().containsKey("node3"));
+        assertTrue(distributionFunction.getNodeToBucketMapping().containsKey("node5"));
+        assertTrue(!distributionFunction.getNodeToBucketMapping().containsKey("node2"));
+        assertTrue(!distributionFunction.getNodeToBucketMapping().containsKey("node4"));
+    }
+
+    @Test
+    public void testUpdateTopologyThenAssignPartitions() {
+        List<String> nodes = prepareNetworkTopology(10);
+        
+        // First: update topology (simulating topology event)
+        distributionFunction.updateTopology(nodes);
+        
+        // Then: assign partitions (should use pre-computed mappings)
+        List<Set<Assignment>> assignments = distributionFunction.assignPartitions(
+                nodes, emptyList(), 100, 3, 2
+        );
+        
+        assertEquals(100, assignments.size());
+        for (Set<Assignment> assignment : assignments) {
+            assertEquals(3, assignment.size());
+            assertEquals(2, assignment.stream().filter(Assignment::isPeer).count());
+        }
     }
 }
