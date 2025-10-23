@@ -25,10 +25,44 @@ import java.util.Set;
 
 /**
  * Stateless distribution utils that produces helper methods for an assignments distribution calculation.
+ * 
+ * <p>This class supports both static algorithm usage (for backward compatibility) and 
+ * pre-warmed algorithm usage (for performance optimization when available).
  */
 public class PartitionDistributionUtils {
 
-    private static final DistributionAlgorithm DISTRIBUTION_ALGORITHM = MementoDistributionFunction.getInstance(1);
+    private static final DistributionAlgorithm STATIC_DISTRIBUTION_ALGORITHM = MementoDistributionFunction.getInstance(1);
+    
+    /** Thread-local reference to the pre-warmed distribution function. */
+    private static final ThreadLocal<ThreadSafeMementoDistributionFunction> PRE_WARMED_ALGORITHM = new ThreadLocal<>();
+
+    /**
+     * Sets the pre-warmed distribution function for the current thread.
+     * This allows components to use the optimized pre-warmed algorithm.
+     * 
+     * @param preWarmedFunction The pre-warmed distribution function
+     */
+    public static void setPreWarmedAlgorithm(ThreadSafeMementoDistributionFunction preWarmedFunction) {
+        PRE_WARMED_ALGORITHM.set(preWarmedFunction);
+    }
+    
+    /**
+     * Clears the pre-warmed distribution function for the current thread.
+     */
+    public static void clearPreWarmedAlgorithm() {
+        PRE_WARMED_ALGORITHM.remove();
+    }
+    
+    /**
+     * Gets the appropriate distribution algorithm for the current thread.
+     * Uses pre-warmed algorithm if available, otherwise falls back to static algorithm.
+     * 
+     * @return The distribution algorithm to use
+     */
+    private static DistributionAlgorithm getDistributionAlgorithm() {
+        ThreadSafeMementoDistributionFunction preWarmed = PRE_WARMED_ALGORITHM.get();
+        return preWarmed != null ? preWarmed : STATIC_DISTRIBUTION_ALGORITHM;
+    }
 
     /**
      * Calculates assignments distribution.
@@ -44,7 +78,7 @@ public class PartitionDistributionUtils {
             int partitions,
             int replicas
     ) {
-        return DISTRIBUTION_ALGORITHM.assignPartitions(
+        return getDistributionAlgorithm().assignPartitions(
                 dataNodes,
                 emptyList(),
                 partitions,
@@ -69,7 +103,7 @@ public class PartitionDistributionUtils {
             int partitions,
             int replicas
     ) {
-        List<Set<Assignment>> assignments = DISTRIBUTION_ALGORITHM.assignPartitions(dataNodes, emptyList(), partitions, replicas, replicas);
+        List<Set<Assignment>> assignments = getDistributionAlgorithm().assignPartitions(dataNodes, emptyList(), partitions, replicas, replicas);
 
         return assignments.get(partitionId);
     }

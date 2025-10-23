@@ -191,6 +191,9 @@ import org.apache.ignite.internal.network.wrapper.JumpToExecutorByConsistentIdAf
 import org.apache.ignite.internal.partition.replicator.PartitionReplicaLifecycleManager;
 import org.apache.ignite.internal.partition.replicator.network.PartitionReplicationMessageGroup;
 import org.apache.ignite.internal.partition.replicator.raft.snapshot.outgoing.OutgoingSnapshotsManager;
+import org.apache.ignite.internal.partitiondistribution.PartitionDistributionPreWarmer;
+import org.apache.ignite.internal.partitiondistribution.PartitionDistributionUtils;
+import org.apache.ignite.internal.partitiondistribution.ThreadSafeMementoDistributionFunction;
 import org.apache.ignite.internal.placementdriver.PlacementDriver;
 import org.apache.ignite.internal.placementdriver.PlacementDriverManager;
 import org.apache.ignite.internal.raft.Loza;
@@ -392,6 +395,8 @@ public class IgniteImpl implements Ignite {
     private final ClusterManagementGroupManager cmgMgr;
 
     private final LogicalTopologyService logicalTopologyService;
+
+    private final PartitionDistributionPreWarmer partitionDistributionPreWarmer;
 
     private final ComponentWorkingDir partitionsWorkDir;
 
@@ -723,6 +728,22 @@ public class IgniteImpl implements Ignite {
         );
 
         logicalTopologyService = new LogicalTopologyServiceImpl(logicalTopology, cmgMgr);
+
+        // Create partition distribution pre-warmer
+        ThreadSafeMementoDistributionFunction distributionFunction = new ThreadSafeMementoDistributionFunction(1);
+        Executor preWarmerExecutor = Executors.newFixedThreadPool(2, r -> {
+            Thread thread = new Thread(r, "partition-distribution-pre-warmer");
+            thread.setDaemon(true);
+            return thread;
+        });
+        partitionDistributionPreWarmer = new PartitionDistributionPreWarmer(
+                distributionFunction,
+                logicalTopologyService,
+                preWarmerExecutor
+        );
+        
+        // Configure PartitionDistributionUtils to use the pre-warmed algorithm
+        PartitionDistributionUtils.setPreWarmedAlgorithm(distributionFunction);
 
         var topologyAwareRaftGroupServiceFactory = new TopologyAwareRaftGroupServiceFactory(
                 clusterSvc,
@@ -1545,6 +1566,9 @@ public class IgniteImpl implements Ignite {
                 .thenCompose(ignored -> systemViewManager.completeRegistration())
                 .thenRunAsync(() -> {
                     try {
+                        // Start partition distribution pre-warmer
+                        partitionDistributionPreWarmer.start();
+
                         // Enable watermark events.
                         lowWatermark.scheduleUpdates();
 
@@ -1643,6 +1667,12 @@ public class IgniteImpl implements Ignite {
         }
 
         ExecutorService lifecycleExecutor = stopExecutor();
+
+        // Stop partition distribution pre-warmer
+        partitionDistributionPreWarmer.stop();
+        
+        // Clear pre-warmed algorithm from thread-local
+        PartitionDistributionUtils.clearPreWarmedAlgorithm();
 
         // TODO https://issues.apache.org/jira/browse/IGNITE-22570
         lifecycleManager.stopNode(new ComponentContext(lifecycleExecutor))
