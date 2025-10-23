@@ -1,5 +1,0 @@
-TestType,Nodes,Partitions,Replicas,RendezvousTime_ms,ThreadSafeNoPreWarm_ms,ThreadSafeWithPreWarm_ms,BestTime_ms,Timestamp
-FullReplicas,10,1000,10,54,110,45,45,2025-10-23 16:58:08
-FullReplicas,10,10000,10,71,167,112,71,2025-10-23 16:58:09
-FullReplicas,50,1000,50,65,163,116,65,2025-10-23 16:58:09
-FullReplicas,50,10000,50,286,589,583,286,2025-10-23 16:58:10

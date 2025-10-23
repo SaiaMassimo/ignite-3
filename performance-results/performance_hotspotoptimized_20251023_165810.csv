@@ -1,2 +1,0 @@
-TestType,Nodes,Partitions,Replicas,RendezvousTime_ms,ThreadSafeNoPreWarm_ms,ThreadSafeWithPreWarm_ms,BestTime_ms,Timestamp
-HotSpotOptimized,100,10000,3,76,12,10,10,2025-10-23 16:58:11
