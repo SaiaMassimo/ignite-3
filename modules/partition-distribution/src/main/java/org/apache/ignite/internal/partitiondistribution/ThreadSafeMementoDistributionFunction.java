@@ -149,6 +149,8 @@ public class ThreadSafeMementoDistributionFunction implements DistributionAlgori
         );
         return bucket;
     }
+    //deve avere un replacment completo temp piu originale, clonare originale come partenza
+    //test coerente rimozione, bilanciato, con minimal distuption e monotonicity
 
     private synchronized int getBucketWithTempMemento(String key, Memento tempMemento) {
         int b = binomialEngine.getBucket(key);
@@ -164,19 +166,6 @@ public class ThreadSafeMementoDistributionFunction implements DistributionAlgori
                 r = tempMemento.replacer(b);
             }
             tempReplacer = r;
-        }
-
-        int replacer = memento.replacer(b);
-        while (replacer >= 0) {
-            final long h = Math.abs(hash(key, b));
-            b = (int) (h % replacer);
-
-            int r = memento.replacer(b);
-            while (r >= replacer) {
-                b = r;
-                r = memento.replacer(b);
-            }
-            replacer = r;
         }
 
         return b;
@@ -212,29 +201,45 @@ public class ThreadSafeMementoDistributionFunction implements DistributionAlgori
             for (int part = 0; part < partitions; part++) {
                 Set<Assignment> assignments = new LinkedHashSet<>();
 
-                Memento tempMemento = new Memento();
-                int currentSize = size();
-                int lastTempRemoved = currentSize;
+                String baseKey = String.valueOf(part);
 
-                String baseKey = "partition-" + part;
+                if (effectiveReplicas == 1) {
+                    int bucket = getBucket(baseKey);
 
-                while (assignments.size() < effectiveReplicas) {
-                    int bucket = getBucketWithTempMemento(baseKey, tempMemento);
+                
+                    String node = bucketToNode.get(bucket);
+                    assignments.add(Assignment.forPeer(node));
+                    
+                    
+                } else {
+                    Memento tempMemento = memento.clone();
+                    int currentSize = size();
+                    int lastTempRemoved = this.lastRemoved;
+
+                    
+                    int bucket = getBucket(baseKey);
 
                     if (bucketToNode.containsKey(bucket)) {
                         String node = bucketToNode.get(bucket);
-                        assignments.add(assignments.size() < consensusGroupSize
-                                ? Assignment.forPeer(node)
-                                : Assignment.forLearner(node));
+                        assignments.add(Assignment.forPeer(node));
 
                         lastTempRemoved = tempMemento.remember(bucket, currentSize - 1, lastTempRemoved);
                         currentSize--;
                     }
+                    
 
-                    baseKey = baseKey + "-next";
+                    while (assignments.size() < effectiveReplicas) {
+                        int bucket = getBucketWithTempMemento(baseKey, tempMemento);
 
-                    if (baseKey.length() > 1000) {
-                        break;
+                        if (bucketToNode.containsKey(bucket)) {
+                            String node = bucketToNode.get(bucket);
+                            assignments.add(assignments.size() < consensusGroupSize
+                                    ? Assignment.forPeer(node)
+                                    : Assignment.forLearner(node));
+
+                            lastTempRemoved = tempMemento.remember(bucket, currentSize - 1, lastTempRemoved);
+                            currentSize--;
+                        }
                     }
                 }
 

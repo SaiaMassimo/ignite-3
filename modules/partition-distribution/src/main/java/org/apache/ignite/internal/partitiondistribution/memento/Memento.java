@@ -7,7 +7,7 @@ import java.util.Arrays;
  *
  * @author Massimo Coluzzi
  */
-public class Memento {
+public class Memento implements Cloneable {
 
 
     /** The minimum size of the memento table. */
@@ -33,6 +33,29 @@ public class Memento {
 
         this.size = 0;
         this.table = new Entry[MIN_TABLE_SIZE];
+
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Memento clone() {
+
+        Memento copy = new Memento();
+        copy.size = this.size;
+        copy.table = new Entry[this.table.length];
+
+        for (int i = 0; i < this.table.length; ++i) {
+            Entry entry = this.table[i];
+            while (entry != null) {
+                final Entry newEntry = new Entry(entry.bucket, entry.replacer, entry.prevRemoved);
+                add(newEntry, copy.table);
+                entry = entry.next;
+            }
+        }
+
+        return copy;
 
     }
 

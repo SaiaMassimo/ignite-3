@@ -224,7 +224,7 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
             int currentSize = size();
             int lastTempRemoved = currentSize;
 
-            String baseKey = "partition-" + part;
+            String baseKey =  String.valueOf(part);
 
             while (assignments.size() < effectiveReplicas) {
                 int bucket = getBucketWithTempMemento(baseKey, tempMemento);
@@ -239,14 +239,6 @@ public class MementoDistributionFunction implements DistributionAlgorithm {
                     // per garantire che la prossima replica vada su un nodo diverso
                     lastTempRemoved = tempMemento.remember(bucket, currentSize - 1, lastTempRemoved);
                     currentSize--;
-                }
-
-                // Modifica la chiave base per il prossimo tentativo
-                baseKey = baseKey + "-next";
-
-                // Protezione contro loop infiniti
-                if (baseKey.length() > 1000) {
-                    break;
                 }
             }
 
